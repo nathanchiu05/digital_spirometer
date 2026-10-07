@@ -1,2 +1,10 @@
-.pio/
+# macOS
 .DS_Store
+
+# PlatformIO (local build setup only — repo stays Arduino-IDE friendly)
+.pio/
+platformio.ini
+pio_sketch_dir.py
+
+# Editor
+.vscode/
