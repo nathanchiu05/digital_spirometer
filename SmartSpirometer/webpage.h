@@ -26,7 +26,7 @@
 //   Stage 3  Hold           — full green circle, 5s countdown
 //                             (mirrors firmware HOLD_SECONDS)
 //   Stage 4  Reset & Exhale — shrink animation, then on to Stage 5
-//   Stage 5  Breath overview— daily-progress ring, stars, metric bars
+//   Stage 5  Breath overview— daily-progress ring, duration + volume bars
 //                             for that one breath (computed client-side
 //                             from live data) -> POST /session
 //   Stage 6  Check-in       — survey -> POST /checkin, then home
@@ -268,10 +268,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   }
   .sum-ring .big { font-size: 1.9em; font-weight: 800; font-variant-numeric: tabular-nums; }
   .sum-ring .lab { color: var(--muted); font-size: 0.85em; }
-  .stars { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
-  .stars svg { width: 30px; height: 30px; }
-  .stars .off { opacity: 0.22; }
-  .stars-label { text-align: center; color: var(--muted); font-size: 0.9em; margin-top: 8px; }
   .metric-row {
     display: flex; align-items: center; gap: 12px;
     padding: 11px 0; border-top: 1px solid #eef2f8;
@@ -661,13 +657,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         </div>
       </div>
 
-      <div class="stars" id="stars"></div>
-      <div class="stars-label" id="starsLabel"></div>
-
       <div class="card" style="padding: 8px 18px;">
-        <div class="metric-row"><span class="name">Consistency</span><span class="segs" id="mConsist"></span><span class="num" id="mConsistV">&mdash;</span></div>
         <div class="metric-row"><span class="name">Duration</span><span class="segs" id="mDur"></span><span class="num" id="mDurV">&mdash;</span></div>
-        <div class="metric-row"><span class="name">Peak Flow</span><span class="segs" id="mPeak"></span><span class="num" id="mPeakV">&mdash;</span></div>
         <div class="metric-row"><span class="name">Volume</span><span class="segs" id="mVol"></span><span class="num" id="mVolV">&mdash;</span></div>
       </div>
 
@@ -1211,33 +1202,16 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     $('sumBreaths').textContent = done + ' / ' + N;
     $('sumRing').style.strokeDashoffset = SUM_C * (1 - (N > 0 ? Math.min(1, done / N) : 0));
 
+    // Only duration and volume are shown; consistency and peak flow are
+    // still saved below for the history and trends pages.
     const consist = rep.consist;
     const dur     = rep.dur;
-    const peak    = rep.peak / 1000;           // mL/s -> L/s
     const vol     = rep.vol  / 1000;           // mL -> L
 
-    segsInto($('mConsist'), consist, 'g');
     segsInto($('mDur'),  dur / 6,   'b');      // 6s span for the bar scale
-    segsInto($('mPeak'), peak / 1,  'b');      // 1 L/s span
     segsInto($('mVol'),  vol / 2,   't');      // 2 L span
-    $('mConsistV').textContent = Math.round(consist * 100) + '%';
     $('mDurV').textContent  = dur.toFixed(1) + ' sec';
-    $('mPeakV').textContent = peak.toFixed(2) + ' L/s';
     $('mVolV').textContent  = vol.toFixed(2) + ' L';
-
-    // Stars rate THIS breath: how steady it was and how close it came to
-    // the volume target. Completion count no longer applies — a single
-    // breath would otherwise always score 1/10 of the daily goal.
-    const volFrac = flow.volTarget > 0 ? Math.min(1, rep.vol / flow.volTarget) : consist;
-    const score = 0.5 * consist + 0.5 * volFrac;
-    const starsN = Math.max(1, Math.round(score * 5));
-    const starSvg = '<svg viewBox="0 0 24 24" fill="#f2b53d"><path d="M12 2.5l2.9 6 6.6 0.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-0.9z"/></svg>';
-    $('stars').innerHTML = Array.from({length: 5}, (_, i) =>
-      '<span class="' + (i < starsN ? '' : 'off') + '">' + starSvg + '</span>').join('');
-    $('starsLabel').textContent =
-      starsN === 5 ? 'Perfect breath!' :
-      starsN >= 4 ? 'Great breath!' :
-      starsN >= 3 ? 'Good breath!' : 'Breath complete';
 
     // Persist this breath to the device (once per trip through the flow).
     // Each record is now a single breath, which is what the check-in

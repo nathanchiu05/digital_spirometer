@@ -17,13 +17,13 @@
 //
 // Hardware:
 //   ESP32 dev board
-//   VL53L0X ToF sensor, socketed directly into the board:
-//     3V3, GND, GPIO 15, GPIO 2 (I2C orientation auto-detected)
+//   VL53L0X ToF sensor (ESP32 default I2C pins, 100 kHz):
+//     VIN -> 3V3 (not 5V), GND -> GND, SDA -> GPIO 21, SCL -> GPIO 22
 //   AirLife 4000mL incentive spirometer
 //
-// NOTE: GPIO 2 is tied to the board's status LED, so the I2C bus is
-// LOCKED to 100 kHz. Do NOT raise it to 400 kHz — higher speeds cause
-// signal degradation and timeout errors.
+// NOTE: the VL53L0X can't resolve the piston below ~40 mm, so volumes
+// at or under ~500 mL read as 0 and a breath only starts once the
+// volume passes BREATH_START_ML (750 mL). Calibration from ToFTest.ino.
 //
 // Libraries (Library Manager):
 //   Adafruit_VL53L0X,
@@ -41,9 +41,9 @@
 
 #include "webpage.h"   // INDEX_HTML lives here
 
-// ---- VL53L0X socketed pins (orientation auto-detected in setup) ----
-#define PIN_A 15
-#define PIN_B 2
+// ---- VL53L0X I2C pins ----
+#define I2C_SDA 21
+#define I2C_SCL 22
 
 Adafruit_VL53L0X lox = Adafruit_VL53L0X();
 
@@ -79,9 +79,9 @@ AsyncWebSocket ws("/ws");
 unsigned long lastBroadcast = 0;
 const unsigned long BROADCAST_INTERVAL_MS = 100;   // ~10 Hz push to the phone
 
-// ---- Sensor sampling (non-blocking, matches 20 ms timing budget ≈ 50 Hz) ----
+// ---- Sensor sampling (non-blocking, matches 50 ms timing budget ≈ 20 Hz) ----
 unsigned long lastSample = 0;
-const unsigned long SAMPLE_INTERVAL_MS = 20;
+const unsigned long SAMPLE_INTERVAL_MS = 50;
 
 // ---- Reset requested from the web task (handled safely in loop()) ----
 volatile bool resetRequested = false;
@@ -158,11 +158,19 @@ char pendingCheckinBuf[768] = "";
 // Calibration & signal processing
 // ================================================================
 
-float D_EMPTY = 180.0;   // distance (mm) when piston rests at 0 mL
-float D_FULL  = 42.0;    // distance (mm) when piston is at 4000 mL
+// Averaged piston distance at known volumes (measured with ToFTest.ino at
+// the 50 ms timing budget), ascending. Converted by piecewise-linear
+// interpolation — the chamber isn't linear. Below ~40 mm the VL53L0X
+// readings compress and even reverse (500 mL reads closer than 0 mL), so
+// nothing at or under ~500 mL is resolvable at this mounting.
+const float CAL_MM[] = { 38.9,  43.9,   51.1,   70.5,   88.8,  107.7,  128.1,  147.0,  163.9 };
+const float CAL_ML[] = {  0.0, 750.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 3500.0, 4000.0 };
+const int   CAL_N    = sizeof(CAL_MM) / sizeof(CAL_MM[0]);
+const float MAX_ML   = 4000.0;
 
-// ---- Idle deadzone: readings below this (pre-breath) display as 0 ----
-const float IDLE_DEADZONE_ML = 100.0;
+// ---- Idle deadzone: readings at/below this (pre-breath) display as 0.
+//      Matches the sensor's ~500 mL blind spot. ----
+const float IDLE_DEADZONE_ML = 500.0;
 
 // ---- Rolling average: volume ----
 const int ROLLING_N = 5;
@@ -171,7 +179,8 @@ int   bufIdx  = 0;
 bool  bufFull = false;
 
 // ---- Rolling average: flow (larger window = smoother readings) ----
-const int FLOW_N = 15;
+// 6 samples at 20 Hz = the same ~300 ms window as 15 samples at 50 Hz.
+const int FLOW_N = 6;
 float flowBuffer[FLOW_N];
 int   flowIdx  = 0;
 bool  flowFull = false;
@@ -186,12 +195,12 @@ bool  targetReached = false;   // informational flag only — no longer ends the
 // ---- Breath timing ----
 unsigned long breathStartTime = 0;
 bool  breathStarted = false;
-const float BREATH_START_THRESHOLD = 170.0;  // piston distance (mm) that signals start
+const float BREATH_START_ML = 750.0;  // volume that signals start (sensor is blind below ~500 mL)
 const float BREATH_TIMEOUT_S       = 15.0;   // safety stop if breath runs too long
 const float BREATH_WARN_S          = 12.0;   // "almost there" warning kicks in
 
 // ---- Flow classification thresholds (mL/s, from real device logs) ----
-const float FLOW_TOO_SLOW   = 200.0;
+const float FLOW_TOO_SLOW   = 300.0;
 const float FLOW_TOO_FAST   = 700.0;
 // const float FLOW_EXHALE_NEG = -100.0;  // strong negative = exhale (misuse)
 const float FLOW_RAMP_SKIP  = 1.0;     // ignore the first second (ramp-up noise)
@@ -204,7 +213,7 @@ int   breathFlowSamples = 0;
 bool exhaleDetected = false;
 
 // ---- Breath-stop detection ----
-const float STOP_FLOW_THRESH = 0.0;   // flow below this counts as "not inhaling"
+const float STOP_FLOW_THRESH = -100.0; // flow below this (mL/s) counts as "not inhaling"
 const int   STOP_NEG_COUNT   = 4;     // consecutive readings to confirm a real stop
 int   consecutiveStop = 0;
 float peakVolume      = 0;            // highest volume reached during the breath
@@ -249,9 +258,14 @@ float getRollingFlowAvg(float newVal) {
   return sum / count;
 }
 
+// Unclamped, so noise around 0 / 4000 mL averages out instead of being
+// biased by the clamp; the caller clamps after the rolling average.
 float distToVolume(float d) {
-  float vol = (D_EMPTY - d) * 4000.0 / (D_EMPTY - D_FULL);
-  return max(0.0f, min(4000.0f, vol));
+  // Find the segment containing d (end segments extrapolate)
+  int i = 0;
+  while (i < CAL_N - 2 && d > CAL_MM[i + 1]) i++;
+  float t = (d - CAL_MM[i]) / (CAL_MM[i + 1] - CAL_MM[i]);
+  return CAL_ML[i] + t * (CAL_ML[i + 1] - CAL_ML[i]);
 }
 
 // Average flow over the breath (negatives + ramp-up already excluded) -> bin
@@ -489,27 +503,16 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 }
 
 // ================================================================
-// Sensor init: socketed VL53L0X with pin-orientation auto-fallback
+// Sensor init: VL53L0X on SDA 21 / SCL 22
 // ================================================================
 
 bool initToFSensor() {
-  // Orientation 1: SDA = 15, SCL = 2
-  Wire.begin(PIN_A, PIN_B);
-  Wire.setClock(100000);   // LOCKED at 100 kHz — GPIO 2 shares the status LED
+  Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.setClock(100000);
+  if (!lox.begin()) return false;
 
-  if (!lox.begin()) {
-    // Orientation 2: SDA = 2, SCL = 15
-    Wire.end();
-    Wire.begin(PIN_B, PIN_A);
-    Wire.setClock(100000);
-
-    if (!lox.begin()) {
-      return false;
-    }
-  }
-
-  // High-speed refresh: 20,000 us timing budget -> ~50 Hz sampling
-  lox.setMeasurementTimingBudgetMicroSeconds(20000);
+  // 50,000 us timing budget -> ~20 Hz; halves per-reading noise vs 20 ms
+  lox.setMeasurementTimingBudgetMicroSeconds(50000);
   return true;
 }
 
@@ -620,12 +623,12 @@ void setup() {
 
   if (LED_PIN >= 0) pinMode(LED_PIN, OUTPUT);
 
-  // ---- VL53L0X (socketed, orientation auto-fallback, 100 kHz, ~50 Hz) ----
+  // ---- VL53L0X (SDA 21 / SCL 22, 100 kHz, ~20 Hz) ----
   if (!initToFSensor()) {
-    Serial.println("[ERROR] Could not communicate with VL53L0X — check socket seating.");
+    Serial.println("[ERROR] Could not communicate with VL53L0X — check wiring (SDA=21, SCL=22).");
     while (1) { delay(100); }
   }
-  Serial.println("VL53L0X ready — high-speed sampling enabled (~50 Hz).");
+  Serial.println("VL53L0X ready — sampling at ~20 Hz.");
 
 // ---- WiFi FIRST: bring up the network stack before the server binds ----
   prefs.begin("spiro", false);
@@ -848,7 +851,7 @@ void loop() {
 
   // ---- Active session (READY / BREATHING): sample the ToF sensor ----
 
-  // ---- Non-blocking sample gate: aligns with the 20 ms timing budget ----
+  // ---- Non-blocking sample gate: aligns with the 50 ms timing budget ----
   if (millis() - lastSample < SAMPLE_INTERVAL_MS) return;
   lastSample = millis();
 
@@ -859,16 +862,20 @@ void loop() {
   int rawDist = measure.RangeMilliMeter;
   if (rawDist >= 8190) return;
 
+  // ---- Volume (smoothed, then clamped — constrain() is a macro, so
+  //      never pass it getRollingAvg() directly) ----
+  float volume = getRollingAvg(distToVolume(rawDist));
+  volume = constrain(volume, 0, MAX_ML);
+
   // ---- Detect breath start (only when the user has armed one) ----
-  if (devState == ST_READY && !breathStarted && rawDist < BREATH_START_THRESHOLD) {
+  if (devState == ST_READY && !breathStarted && volume >= BREATH_START_ML) {
     breathStarted = true;
     devState = ST_BREATHING;
     breathStartTime = millis();
     Serial.println(">> Breath started.");
   }
 
-  // ---- Volume + flow ----
-  float volume = getRollingAvg(distToVolume(rawDist));
+  // ---- Flow ----
   unsigned long now = millis();
   float dt = (lastTime > 0) ? (now - lastTime) / 1000.0 : 0;
   float rawFlow = (dt > 0) ? (volume - lastVolume) / dt : 0;
@@ -879,11 +886,11 @@ void loop() {
 
   float elapsed = breathStarted ? (millis() - breathStartTime) / 1000.0 : 0.0;
 
-  // ---- Idle deadzone (feature 1): before a breath starts, sensor
-  //      jitter (-30..100 mL band) is reported as a clean 0/idle.
+  // ---- Idle deadzone (feature 1): before a breath starts, anything in
+  //      the sensor's 0..500 mL blind spot is reported as a clean 0/idle.
   //      Internal pipeline still runs on real values. ----
   if (!breathStarted) {
-    webVolume = (volume < IDLE_DEADZONE_ML) ? 0 : volume;
+    webVolume = (volume <= IDLE_DEADZONE_ML) ? 0 : volume;
     webFlow   = 0;
     webState  = "Ready";
   } else {
