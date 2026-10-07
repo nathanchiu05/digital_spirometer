@@ -2,7 +2,7 @@
 // ToF Test: standalone VL53L0X sanity check for the Smart Spirometer
 //
 // Reads the sensor in continuous mode and prints the distance to
-// Serial as fast as it comes in (~20 Hz). No WiFi or session logic.
+// Serial as fast as it comes in (~50 Hz). No WiFi or session logic.
 //
 // Wiring (ESP32 default I2C pins), I2C at 100 kHz:
 //   VIN -> 3V3 (not 5V), GND -> GND, SDA -> GPIO 21, SCL -> GPIO 22
@@ -28,15 +28,13 @@
 #define I2C_SDA 21
 #define I2C_SCL 22
 
-const uint32_t TIMING_BUDGET_US = 50000;   // 50 ms -> ~20 Hz (longer = less noise)
+const uint32_t TIMING_BUDGET_US = 20000;   // 20 ms -> ~50 Hz
 
 // Calibration: averaged distance at known volumes, ascending order.
-// Below ~40 mm the VL53L0X readings compress and even reverse: 500 mL
-// reads closer (36.6 mm) than 0 mL (38.9 mm), so volumes at or under
-// 500 mL are not resolvable at this mounting and are reported as 0
-// (see DEADZONE_ML). 750 mL is usable but wanders ~+/-300 mL.
-// 0 / 750 mL points measured at the 50 ms timing budget.
-const float CAL_MM[] = { 38.9,  43.9,   51.1,   70.5,   88.8,  107.7,  128.1,  147.0,  163.9 };
+// Below ~40 mm the VL53L0X compresses readings: 0 and 500 mL both read
+// ~40 mm, so volumes at or under 500 mL are not resolvable at this
+// mounting and are reported as 0 (see DEADZONE_ML).
+const float CAL_MM[] = { 40.3,  47.1,   51.1,   70.5,   88.8,  107.7,  128.1,  147.0,  163.9 };
 const float CAL_ML[] = {  0.0, 750.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 3500.0, 4000.0 };
 const int   CAL_N    = sizeof(CAL_MM) / sizeof(CAL_MM[0]);
 const float MAX_ML   = 4000.0;
