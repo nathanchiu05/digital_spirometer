@@ -27,6 +27,6 @@ The device runs on a 3.7 V 1100 mAh Li-ion battery. The battery connects to a ch
 ## Limitations
 
 - Volume is measured with a VL53L0X time-of-flight sensor pointed at the piston. It's cheap and easy to wire up, but it isn't very accurate at close range. Below about 40 mm the readings bunch up and can even go backwards, so anything under ~500 mL can't be told apart from an empty chamber.
-- Because of that, the device treats 0–500 mL as idle and only starts timing a breath once it passes 750 mL. Small or weak breaths won't register at all.
+- Because of that, a breath only counts once the volume passes 750 mL. That's when timing starts and the score begins tracking. The extra margin above the ~500 mL blind spot keeps sensor noise from starting a breath by accident. Any breath that peaks below 750 mL won't register at all. While waiting for a breath, the app shows anything under 500 mL as 0 so the noise doesn't flicker on screen.
 - Readings are also a bit noisy, so they're averaged over a few samples, which slows the response slightly.
 - A more precise (and more expensive) ToF sensor built for short range would fix most of this. It could pick up the small piston movements at the bottom of the chamber, which would let the device measure lower volumes and start timing a breath sooner.
