@@ -39,7 +39,7 @@ Looking at the two metrics side by side tells the care team more than either one
 
 ## Circuit
 
-![Circuit diagram](circuit-diagram.svg)
+![Circuit diagram](charts/circuit-diagram.svg)
 
 The device runs on a 3.7 V 1100 mAh Li-ion battery. The battery connects to a charge/boost module on BAT+ and BAT−. The module charges the battery and steps its output up to 5 V, which is set with the module's potentiometer. The module's output goes to the ESP32's VIN and GND pins, and the ESP32's onboard regulator turns that into 3.3 V. The VL53L0X time-of-flight sensor runs off the ESP32's 3V3 and GND pins and talks to it over I²C: SDA on D21 and SCL on D22.
 
