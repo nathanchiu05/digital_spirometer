@@ -1,35 +1,3 @@
-// ================================================================
-// Smart Spirometer — ESP32 firmware
-// VL53L0X piston tracking + web app (headless — no OLED)
-//
-// STATE MACHINE (v5): the ToF sensor is sampled ONLY while a breath
-// session is active (Ready -> Breathing -> Hold). Setting a goal,
-// saving a profile, or finishing a breath leaves the sensor idle —
-// every breath starts with an explicit "Start breath" tap in the app.
-//
-// NETWORKING: Access Point ONLY. The device hosts its own WiFi
-// network and is reachable only through it — it never joins a home
-// or public network.
-//
-//   Network:  SmartSpirometer
-//   Password: breathe123
-//   URL:      http://192.168.4.1
-//
-// Hardware:
-//   ESP32 dev board
-//   VL53L0X ToF sensor (ESP32 default I2C pins, 100 kHz):
-//     VIN -> 3V3 (not 5V), GND -> GND, SDA -> GPIO 21, SCL -> GPIO 22
-//   AirLife 4000mL incentive spirometer
-//
-// NOTE: the VL53L0X can't resolve the piston below ~40 mm, so volumes
-// at or under ~500 mL read as 0 and a breath only starts once the
-// volume passes BREATH_START_ML (750 mL). Calibration from ToFTest.ino.
-//
-// Libraries (Library Manager):
-//   Adafruit_VL53L0X,
-//   ESP Async WebServer (ESP32Async), Async TCP (ESP32Async), ArduinoJson
-// ================================================================
-
 #include <Wire.h>
 #include "Adafruit_VL53L0X.h"
 
@@ -39,9 +7,8 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 
-#include "webpage.h"   // INDEX_HTML lives here
+#include "webpage.h" 
 
-// ---- VL53L0X I2C pins ----
 #define I2C_SDA 21
 #define I2C_SCL 22
 
@@ -52,14 +19,6 @@ const int LED_PIN    = -1;
 
 void setLed(bool on) { if (LED_PIN >= 0) digitalWrite(LED_PIN, on ? HIGH : LOW); }
 
-// ================================================================
-// WiFi — Access Point only
-// ================================================================
-// The device hosts its own network and is reachable ONLY through it.
-// There is no station/client mode: the ESP32 never joins a home or
-// public WiFi, so it is never exposed to a shared network and the
-// address is always the same.
-//
 //   Network:  SmartSpirometer
 //   Password: breathe123
 //   URL:      http://192.168.4.1
@@ -79,45 +38,25 @@ AsyncWebSocket ws("/ws");
 unsigned long lastBroadcast = 0;
 const unsigned long BROADCAST_INTERVAL_MS = 100;   // ~10 Hz push to the phone
 
-// ---- Sensor sampling (non-blocking, matches 50 ms timing budget ≈ 20 Hz) ----
 unsigned long lastSample = 0;
 const unsigned long SAMPLE_INTERVAL_MS = 50;
 
-// ---- Reset requested from the web task (handled safely in loop()) ----
 volatile bool resetRequested = false;
 
-// ---- Explicit start: a breath session can only begin after the user
-// taps "Start breath" in the app (/startBreath). ----
 volatile bool startRequested = false;
 
-// ================================================================
-// Device state machine
-// ================================================================
-// The ToF sensor is sampled ONLY while a breath session is active
-// (READY -> BREATHING -> HOLD). In IDLE and DONE the sensor is left
-// untouched: setting a goal, saving a profile, or finishing a breath
-// never starts sampling. Every session begins with an explicit
-// "Start breath" tap and ends back in DONE/IDLE, waiting for the
-// next explicit start.
-//
 //   ST_IDLE      standby — no sampling (boot, after New Breath/exit)
 //   ST_READY     armed by /startBreath — sampling, waiting for inhale
 //   ST_BREATHING inhale in progress — sampling
 //   ST_HOLD      breath captured — 5 s NON-BLOCKING hold countdown
 //   ST_DONE      results shown — no sampling; waits for next start
-//
-// NOTE: declared before any function definition (the Arduino IDE's
-// auto-prototype step chokes on custom types that appear later).
+
 enum DeviceState : uint8_t { ST_IDLE, ST_READY, ST_BREATHING, ST_HOLD, ST_DONE };
 DeviceState devState = ST_IDLE;
 
 // Non-blocking hold-phase bookkeeping
 unsigned long holdStartMillis = 0;
 int holdLastShown = -1;   // last countdown number printed to Serial
-
-// ================================================================
-// Profile & recovery tracking (Home-screen UI)
-// ================================================================
 
 // Profile (persisted in NVS, editable from the app's Profile tab)
 String userName     = "Friend";
@@ -154,10 +93,6 @@ volatile bool checkinPending = false;
 char pendingSessionBuf[512] = "";
 char pendingCheckinBuf[768] = "";
 
-// ================================================================
-// Calibration & signal processing
-// ================================================================
-
 // Averaged piston distance at known volumes (measured with ToFTest.ino at
 // the 50 ms timing budget), ascending. Converted by piecewise-linear
 // interpolation — the chamber isn't linear. Below ~40 mm the VL53L0X
@@ -168,11 +103,10 @@ const float CAL_ML[] = {  0.0, 750.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 35
 const int   CAL_N    = sizeof(CAL_MM) / sizeof(CAL_MM[0]);
 const float MAX_ML   = 4000.0;
 
-// ---- Idle deadzone: readings at/below this (pre-breath) display as 0.
 //      Matches the sensor's ~500 mL blind spot. ----
 const float IDLE_DEADZONE_ML = 500.0;
 
-// ---- Rolling average: volume ----
+// Rolling average
 const int ROLLING_N = 5;
 float volBuffer[ROLLING_N];
 int   bufIdx  = 0;
@@ -200,7 +134,7 @@ const float BREATH_TIMEOUT_S       = 15.0;   // safety stop if breath runs too l
 const float BREATH_WARN_S          = 12.0;   // "almost there" warning kicks in
 
 // ---- Flow classification thresholds (mL/s, from real device logs) ----
-const float FLOW_TOO_SLOW   = 300.0;
+const float FLOW_TOO_SLOW   = 200.0;
 const float FLOW_TOO_FAST   = 700.0;
 // const float FLOW_EXHALE_NEG = -100.0;  // strong negative = exhale (misuse)
 const float FLOW_RAMP_SKIP  = 1.0;     // ignore the first second (ramp-up noise)
@@ -214,7 +148,7 @@ bool exhaleDetected = false;
 
 // ---- Breath-stop detection ----
 const float STOP_FLOW_THRESH = -100.0; // flow below this (mL/s) counts as "not inhaling"
-const int   STOP_NEG_COUNT   = 4;     // consecutive readings to confirm a real stop
+const int   STOP_NEG_COUNT   = 7;     // consecutive readings to confirm a real stop
 int   consecutiveStop = 0;
 float peakVolume      = 0;            // highest volume reached during the breath
 

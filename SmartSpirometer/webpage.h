@@ -91,10 +91,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   }
 
   /* ---------- Top header ---------- */
-  .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 6px 0 14px; position: relative; }
-  .icon-btn { background: none; border: none; color: var(--navy); padding: 6px; cursor: pointer; display: flex; }
+  .top-bar { display: flex; justify-content: center; align-items: center; padding: 6px 0 14px; }
   .conn-dot {
-    position: absolute; left: 50%; transform: translateX(-50%);
     font-size: 0.7em; color: var(--muted);
     display: flex; align-items: center; gap: 5px; white-space: nowrap;
   }
@@ -203,6 +201,75 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     transition: transform 2.4s ease;
   }
   .breath-wrap.holdfull .breath-circle { transform: scale(1) !important; }
+  #inhaleCircle { transition: background 0.3s; }   /* size is eased in JS (stepAnim) */
+
+  /* Inhale display switch: Circle / Gauge / Pace / Curve */
+  .gui-switch {
+    display: flex; gap: 4px; max-width: 340px; margin: 14px auto 0; padding: 4px;
+    background: #e7edf5; border-radius: 999px;
+  }
+  .gui-switch button {
+    flex: 1; min-height: 36px; border: none; border-radius: 999px; background: none;
+    color: var(--muted); font: inherit; font-size: 0.82em; font-weight: 700; cursor: pointer;
+  }
+  .gui-switch button.on { background: var(--card); color: var(--navy); box-shadow: 0 2px 6px rgba(22, 36, 76, 0.12); }
+  .gui { display: none; }
+  .gui.on { display: block; }
+
+  /* Gauge: a column that fills toward a dashed goal line (goal sits at 80%) */
+  .gauge { display: flex; justify-content: center; gap: 12px; height: 284px; margin: 22px auto 6px; }
+  .gauge-scale, .gauge-side { position: relative; width: 64px; }
+  .gauge-scale span {
+    position: absolute; right: 0; transform: translateY(50%);
+    font-size: 12px; font-weight: 600; color: var(--muted);
+  }
+  .gauge-scale .goal { font-weight: 800; color: var(--navy); }
+  .gauge-tube {
+    position: relative; width: 110px; border: 3px solid #dbe6f5; border-radius: 28px;
+    background: var(--card); overflow: hidden; transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .gauge-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--green); transition: background 0.3s; }
+  .gauge-goal { position: absolute; left: 8px; right: 8px; bottom: 80%; border-top: 3px dashed var(--navy); }
+  .gauge-now { position: absolute; left: 0; bottom: 0; transform: translateY(50%); display: flex; flex-direction: column; }
+  .gauge-now .k, .pace-vol .k, .curve-read .k { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
+  .gauge-now .v { font-size: 22px; font-weight: 800; }
+
+  /* Pace: a ball that rides on flow rate through slow / steady / fast zones */
+  .pace { display: flex; justify-content: center; gap: 14px; height: 236px; margin: 22px auto 0; }
+  .pace-lane {
+    position: relative; width: 84px; border: 3px solid #dbe6f5; border-radius: 42px;
+    overflow: hidden; display: flex; flex-direction: column; background: var(--card);
+  }
+  .pace-lane .z-fast { height: 29%; background: var(--red-soft); }
+  .pace-lane .z-good { height: 36%; background: var(--green-soft); border-top: 2px solid #9fdcbb; border-bottom: 2px solid #9fdcbb; }
+  .pace-lane .z-slow { flex: 1; background: var(--amber-soft); }
+  .pace-ball {
+    position: absolute; left: 50%; bottom: 4px; width: 56px; height: 56px; margin-left: -28px;
+    border-radius: 50%; background: var(--green); box-shadow: 0 6px 14px rgba(22, 36, 76, 0.2);
+    transition: background 0.3s;
+  }
+  .pace-labels { position: relative; width: 90px; font-size: 14px; font-weight: 700; }
+  .pace-labels span { position: absolute; left: 0; transform: translateY(-50%); }
+  .pace-vol { max-width: 320px; margin: 16px auto 0; }
+  .pace-vol .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .pace-vol .v { font-size: 15px; font-weight: 800; }
+  .pace-bar { height: 12px; margin-top: 8px; border-radius: 6px; background: #e7edf5; overflow: hidden; }
+  .pace-bar div { height: 100%; width: 0; border-radius: 6px; background: var(--green); }
+
+  /* Curve: live volume vs time against an ideal-pace line */
+  .curve { margin: 18px auto 0; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 10px 8px; }
+  .curve-read { display: flex; justify-content: space-between; padding: 0 8px; }
+  .curve-read .v { font-size: 22px; font-weight: 800; }
+  .curve svg { display: block; width: 100%; height: auto; }
+  .curve-key { display: flex; justify-content: center; gap: 18px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .curve-key span { display: flex; align-items: center; gap: 6px; }
+
+  /* Flow-state colours shared by the new displays */
+  .guis.good .gauge-tube { border-color: #9fdcbb; box-shadow: 0 0 24px rgba(52, 182, 120, 0.3); }
+  .guis.fast .gauge-tube { border-color: var(--red); box-shadow: 0 0 24px rgba(229, 72, 77, 0.3); }
+  .guis.slow .gauge-tube { border-color: var(--amber); box-shadow: 0 0 24px rgba(232, 151, 58, 0.3); }
+  .guis.fast .gauge-fill, .guis.fast .pace-ball { background: var(--red); }
+  .guis.slow .gauge-fill, .guis.slow .pace-ball { background: var(--amber); }
   .exhale-chevs span {
     position: absolute; color: #a9c4ec; font-size: 18px; font-weight: 700;
   }
@@ -430,16 +497,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
   <div id="pulse"></div>
 
-  // <!-- Top header -->
-  // <div class="top-bar">
-  //   <button class="icon-btn" aria-label="Menu">
-  //     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-  //   </button>
-  //   <div class="conn-dot" id="conn">Connecting</div>
-  //   <button class="icon-btn" aria-label="Notifications">
-  //     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-  //   </button>
-  // </div>
+  <!-- Top header -->
+  <div class="top-bar">
+    <div class="conn-dot" id="conn">Connecting</div>
+  </div>
 
   <!-- ================= HOME ================= -->
   <div class="view active" id="view-home">
@@ -561,9 +622,72 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <div class="stage" id="stage-inhale">
       <div class="stage-title" style="font-size:1.2em;">Take a slow, deep breath</div>
 
-      <div class="breath-wrap good" id="inhaleWrap">
-        <div class="breath-track"></div>
-        <div class="breath-circle" id="inhaleCircle"></div>
+      <div class="gui-switch" role="group" aria-label="Inhale display">
+        <button type="button" data-gui="circle" onclick="setGui('circle')">Circle</button>
+        <button type="button" data-gui="gauge" onclick="setGui('gauge')">Gauge</button>
+        <button type="button" data-gui="pace" onclick="setGui('pace')">Pace</button>
+        <button type="button" data-gui="curve" onclick="setGui('curve')">Curve</button>
+      </div>
+
+      <div class="guis good" id="inhaleGuis">
+        <div class="gui" id="gui-circle">
+          <div class="breath-wrap good" id="inhaleWrap">
+            <div class="breath-track"></div>
+            <div class="breath-circle" id="inhaleCircle"></div>
+          </div>
+        </div>
+
+        <div class="gui" id="gui-gauge">
+          <div class="gauge">
+            <div class="gauge-scale" id="gaugeScale"></div>
+            <div class="gauge-tube"><div class="gauge-fill" id="gaugeFill"></div><div class="gauge-goal"></div></div>
+            <div class="gauge-side">
+              <div class="gauge-now" id="gaugeNow"><span class="k">NOW</span><span class="v" id="gaugeNowV">0.0 L</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gui" id="gui-pace">
+          <div class="pace">
+            <div class="pace-lane" id="paceLane">
+              <div class="z-fast"></div><div class="z-good"></div><div class="z-slow"></div>
+              <div class="pace-ball" id="paceBall"></div>
+            </div>
+            <div class="pace-labels">
+              <span style="top:14.5%; color:#c4363b;">Too fast</span>
+              <span style="top:47%; color:#1f7a4d; font-size:17px; font-weight:800;">Steady</span>
+              <span style="top:82.5%; color:#b06a14;">Too slow</span>
+            </div>
+          </div>
+          <div class="pace-vol">
+            <div class="row"><span class="k">VOLUME</span><span class="v" id="paceVolV">0.0 / 2.0 L</span></div>
+            <div class="pace-bar"><div id="paceBar"></div></div>
+          </div>
+        </div>
+
+        <div class="gui" id="gui-curve">
+          <div class="curve">
+            <div class="curve-read">
+              <span><span class="k">VOLUME</span><br><span class="v" id="cvVol">0.0 L</span></span>
+              <span style="text-align:right;"><span class="k">TIME</span><br><span class="v" id="cvTime">0.0 s</span></span>
+            </div>
+            <svg viewBox="0 0 320 236" role="img" aria-label="Inhale volume over time against the ideal pace">
+              <line x1="36" y1="212" x2="310" y2="212" stroke="#dbe6f5" stroke-width="2"/>
+              <line id="cvGoal" x1="36" y1="58" x2="310" y2="58" stroke="#16244c" stroke-width="2" stroke-dasharray="6 5"/>
+              <text id="cvGoalTxt" x="310" y="50" text-anchor="end" font-size="12" font-weight="700" fill="#16244c">Goal 2.0 L</text>
+              <text x="28" y="216" text-anchor="end" font-size="11" fill="#8a94a6">0</text>
+              <text x="36" y="230" text-anchor="middle" font-size="11" fill="#8a94a6">0 s</text>
+              <text id="cvTEnd" x="310" y="230" text-anchor="end" font-size="11" fill="#8a94a6">6 s</text>
+              <polyline id="cvIdeal" fill="none" stroke="#8a94a6" stroke-width="3" stroke-dasharray="2 7" stroke-linecap="round"/>
+              <polyline id="cvLine" fill="none" stroke="#34b678" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle id="cvDot" r="7" fill="#34b678" stroke="#fff" stroke-width="3" style="display:none;"/>
+            </svg>
+            <div class="curve-key">
+              <span><svg width="22" height="6" aria-hidden="true"><line x1="2" y1="3" x2="20" y2="3" stroke="#34b678" stroke-width="4" stroke-linecap="round"/></svg>Your breath</span>
+              <span><svg width="22" height="6" aria-hidden="true"><line x1="2" y1="3" x2="20" y2="3" stroke="#8a94a6" stroke-width="3" stroke-dasharray="2 5" stroke-linecap="round"/></svg>Ideal pace</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="coach-msg good" id="coachMsg">
@@ -857,8 +981,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <div class="card">
       <h3>Device</h3>
       <p class="sub" id="deviceInfo">&mdash;</p>
-      <p class="sub" id="syncStatus" style="margin-top:6px;">Cloud sync: not configured</p>
-      <button class="btn ghost" onclick="syncHistory()">Sync now</button>
     </div>
   </div>
 
@@ -901,11 +1023,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   let deviceId = '';         // arrives from the device broadcast
   let syncBusy = false;
 
-  function setSyncStatus(msg) {
-    const el = $('syncStatus');
-    if (el) el.textContent = msg;
-  }
-
   // Upsert ALL on-device history to Supabase. The device only holds 20
   // records and (device_id, epoch) is unique server-side, so pushing
   // everything every time is idempotent and needs no sync bookkeeping.
@@ -914,7 +1031,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   function syncHistory() {
     if (!SUPABASE_URL || !SUPABASE_KEY || !deviceId || syncBusy) return;
     syncBusy = true;
-    setSyncStatus('Syncing\u2026');
     fetch('/history')
       .then(r => r.json())
       .then(list => {
@@ -932,7 +1048,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             avg_peak_flow_mls: r.p !== undefined ? r.p : null,
             checkin: r.ci || null
           }));
-        if (rows.length === 0) { setSyncStatus('Nothing to sync'); return; }
+        if (rows.length === 0) return;
         return fetch(SUPABASE_URL + '/rest/v1/sessions?on_conflict=device_id,epoch', {
           method: 'POST',
           headers: {
@@ -942,13 +1058,9 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             'Prefer': 'resolution=merge-duplicates,return=minimal'
           },
           body: JSON.stringify(rows)
-        }).then(r => {
-          setSyncStatus(r.ok
-            ? 'Synced ' + rows.length + ' sessions \u00b7 ' + new Date().toLocaleTimeString()
-            : 'Sync failed (' + r.status + ')');
         });
       })
-      .catch(() => setSyncStatus('Offline \u2014 will sync when internet is available'))
+      .catch(() => {})   // offline: the next breath's sync re-sends everything
       .finally(() => { syncBusy = false; });
   }
 
@@ -1044,9 +1156,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     // /startBreath arms the firmware — breaths NEVER begin without it
     fetch('/startBreath', { method: 'POST' }).catch(() => {});
     resetRepCapture();
+    resetAnim();
     setInhaleClass('good');
     $('coachMain').textContent = 'Inhale to begin';
-    $('coachLine2').textContent = 'Fill the circle by inhaling slowly and steadily.';
+    setGui(inhaleGui);   // also sets the display-specific hint line
     $('coachChip').style.visibility = 'hidden';
     gotoStage('inhale');
   }
@@ -1073,11 +1186,14 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     flow.breathStartTs = 0;
     flow.samples = [];
     flow.lastFlowClass = 'good';
+    flow.pendingClass = 'good';
+    flow.pendingCount = 0;
   }
 
   // ---------------- Stage 2: live coaching ----------------
   function setInhaleClass(cls) {
     $('inhaleWrap').className = 'breath-wrap ' + cls;
+    $('inhaleGuis').className = 'guis ' + cls;
     $('coachMsg').className = 'coach-msg ' + cls;
     $('inhalePill').className = 'status-pill ' + cls;
     const chip = $('coachChip');
@@ -1092,16 +1208,135 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   };
   const FLOW_LABEL = { good: 'Good', fast: 'Too fast', slow: 'Too slow' };
 
+  // ---- Inhale displays: Circle / Gauge / Pace / Curve ----
+  // The choice is remembered per phone. Only the inhale stage changes;
+  // hold and exhale keep the circle.
+  const GUIS = ['circle', 'gauge', 'pace', 'curve'];
+  const GUI_HINT = {
+    circle: 'Fill the circle by inhaling slowly and steadily.',
+    gauge:  'Fill the column up to the dashed line.',
+    pace:   'Keep the ball in the green band.',
+    curve:  'Follow the dotted line up to your goal.'
+  };
+  let inhaleGui = 'circle';
+  try { const g = localStorage.getItem('inhaleGui'); if (GUIS.includes(g)) inhaleGui = g; } catch (e) {}
+
+  function setGui(g) {
+    inhaleGui = g;
+    try { localStorage.setItem('inhaleGui', g); } catch (e) {}
+    document.querySelectorAll('.gui-switch button').forEach(b => {
+      const on = b.dataset.gui === g;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on);
+    });
+    GUIS.forEach(n => $('gui-' + n).classList.toggle('on', n === g));
+    if (!flow.breathStartTs) $('coachLine2').textContent = GUI_HINT[g];
+    renderGui();
+    drawCurve();
+  }
+
+  function volTarget() { return flow.volTarget > 0 ? flow.volTarget : 2000; }
+  function litres(ml) { return (Math.max(0, ml) / 1000).toFixed(1); }
+
+  // The device only sends ~10 updates/s, so instead of jumping to each
+  // new reading the displays ease toward it every animation frame.
+  const anim = { vol: 0, volT: 0, flow: 0, flowT: 0, last: 0, raf: 0, scaleFor: 0 };
+
+  function setAnimTarget(vol, fl) {
+    anim.volT = vol;
+    anim.flowT = Math.max(0, fl);
+    if (!anim.raf) {
+      anim.last = performance.now();
+      anim.raf = requestAnimationFrame(stepAnim);
+    }
+  }
+
+  function stepAnim(now) {
+    const k = 1 - Math.exp(-(now - anim.last) / 120);   // ~120 ms lag
+    anim.last = now;
+    anim.vol  += (anim.volT  - anim.vol)  * k;
+    anim.flow += (anim.flowT - anim.flow) * k;
+    if (Math.abs(anim.volT - anim.vol) < 1)   anim.vol  = anim.volT;
+    if (Math.abs(anim.flowT - anim.flow) < 1) anim.flow = anim.flowT;
+    renderGui();
+    const settled = anim.vol === anim.volT && anim.flow === anim.flowT;
+    anim.raf = settled ? 0 : requestAnimationFrame(stepAnim);
+  }
+
+  function resetAnim() {
+    cancelAnimationFrame(anim.raf);
+    anim.raf = 0;
+    anim.vol = anim.volT = anim.flow = anim.flowT = 0;
+    renderGui();
+    drawCurve();
+  }
+
+  // Map flow (mL/s) onto the pace lane: slow zone is the bottom 35%,
+  // steady 35-71%, fast above that (matches the lane's CSS zones).
+  function paceFrac(fl) {
+    if (fl <= FLOW_TOO_SLOW) return 0.35 * fl / FLOW_TOO_SLOW;
+    if (fl <= FLOW_TOO_FAST) return 0.35 + 0.36 * (fl - FLOW_TOO_SLOW) / (FLOW_TOO_FAST - FLOW_TOO_SLOW);
+    return Math.min(1, 0.71 + 0.29 * (fl - FLOW_TOO_FAST) / (1000 - FLOW_TOO_FAST));
+  }
+
+  function renderGui() {
+    const target = volTarget();
+    if (inhaleGui === 'circle') {
+      const frac = Math.max(0.25, Math.min(1, anim.vol / target));
+      $('inhaleCircle').style.transform = 'scale(' + frac.toFixed(4) + ')';
+    } else if (inhaleGui === 'gauge') {
+      const max = target * 1.25;   // goal line sits at 80% of the column
+      if (anim.scaleFor !== target) {
+        anim.scaleFor = target;
+        $('gaugeScale').innerHTML =
+          [0, 0.2, 0.4, 0.6].map(f => '<span style="bottom:' + f * 100 + '%">' + litres(max * f) + '</span>').join('') +
+          '<span class="goal" style="bottom:80%">Goal ' + litres(target) + ' L</span>';
+      }
+      const pct = Math.min(100, 100 * anim.vol / max).toFixed(2) + '%';
+      $('gaugeFill').style.height = pct;
+      $('gaugeNow').style.bottom = pct;
+      $('gaugeNowV').textContent = litres(anim.vol) + ' L';
+    } else if (inhaleGui === 'pace') {
+      const lane = $('paceLane').clientHeight;
+      $('paceBall').style.bottom = (4 + paceFrac(anim.flow) * (lane - 64)).toFixed(1) + 'px';
+      $('paceBar').style.width = Math.min(100, 100 * anim.vol / target).toFixed(2) + '%';
+      $('paceVolV').textContent = litres(anim.vol) + ' / ' + litres(target) + ' L';
+    }
+  }
+
+  // Curve is redrawn per reading (not per frame) from the captured samples.
+  function drawCurve() {
+    if (inhaleGui !== 'curve') return;
+    const target = volTarget(), vMax = target * 1.25;
+    const pts = flow.samples;
+    const last = pts[pts.length - 1];
+    const tEnd = Math.max(6000, last ? last.t + 500 : 0);
+    const X = t => 36 + 274 * t / tEnd;
+    const Y = v => 212 - 192 * Math.min(Math.max(0, v), vMax) / vMax;
+    const gy = Y(target).toFixed(1);
+    $('cvGoal').setAttribute('y1', gy);
+    $('cvGoal').setAttribute('y2', gy);
+    $('cvGoalTxt').setAttribute('y', gy - 8);
+    $('cvGoalTxt').textContent = 'Goal ' + litres(target) + ' L';
+    $('cvTEnd').textContent = Math.round(tEnd / 1000) + ' s';
+    $('cvIdeal').setAttribute('points', '36,212 ' + X(4000).toFixed(1) + ',' + gy + ' 310,' + gy);
+    $('cvLine').setAttribute('points', pts.map(p => X(p.t).toFixed(1) + ',' + Y(p.vol).toFixed(1)).join(' '));
+    const dot = $('cvDot');
+    dot.style.display = last ? '' : 'none';
+    if (last) { dot.setAttribute('cx', X(last.t).toFixed(1)); dot.setAttribute('cy', Y(last.vol).toFixed(1)); }
+    $('cvVol').textContent  = litres(last ? last.vol : 0) + ' L';
+    $('cvTime').textContent = (last ? last.t / 1000 : 0).toFixed(1) + ' s';
+  }
+
   function handleInhale(d) {
-    // Circle size tracks volume toward the target
-    const target = d.target > 0 ? d.target : 2000;
-    const frac = Math.max(0.25, Math.min(1, d.volume / target));
-    $('inhaleCircle').style.transform = 'scale(' + frac + ')';
+    if (d.target > 0) flow.volTarget = d.target;
+    setAnimTarget(d.volume, d.flow);
 
     if (d.state !== 'Breathing') return;   // idle: waiting for inhale
     if (!flow.breathStartTs) flow.breathStartTs = Date.now();
     const sinceStart = Date.now() - flow.breathStartTs;
-    flow.samples.push({ t: sinceStart, flow: d.flow });
+    flow.samples.push({ t: sinceStart, flow: d.flow, vol: d.volume });
+    drawCurve();
 
     // Classification mirrors the firmware: skip the 1s ramp-up
     let cls = 'good';
@@ -1111,6 +1346,12 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       if (cls === 'fast') flow.cntFast++;
       else if (cls === 'slow') flow.cntSlow++;
     }
+
+    // Stats above use every reading; the display only switches once a new
+    // class has held for 3 readings (~300 ms) so it doesn't flicker.
+    if (cls === flow.pendingClass) flow.pendingCount++;
+    else { flow.pendingClass = cls; flow.pendingCount = 1; }
+    if (flow.pendingCount < 3) cls = flow.lastFlowClass;
 
     setInhaleClass(cls);
     const [main, line2] = COACH_TEXT[cls];
@@ -1232,7 +1473,9 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body
-      }).catch(() => {});
+      })
+      .then(r => { if (r.ok) setTimeout(syncHistory, 600); })   // let loop() commit to NVS
+      .catch(() => {});
     }
   }
 
@@ -1404,7 +1647,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     const adherence  = Math.min(100, Math.round(100 * totBreaths / (goal * days)));
     const avg = (fn) => inWin.length ? inWin.reduce((a, r) => a + fn(r), 0) / inWin.length : 0;
     const dur  = avg(r => r.d || 0);
-    const peak = avg(r => r.p || 0) / 1000;
     const vol  = avg(r => r.v || 0) / 1000;
     const fastShare = inWin.length
       ? inWin.filter(r => r.o === 'Too fast').length / inWin.length : 0;
@@ -1428,7 +1670,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       '</div>' +
       '<div class="card trend-rows">' +
         '<div class="trend-row"><span class="tl">Avg. inspiratory duration</span><span class="tv">' + dur.toFixed(1) + ' sec</span></div>' +
-        '<div class="trend-row"><span class="tl">Avg. peak flow</span><span class="tv">' + peak.toFixed(2) + ' L/s</span></div>' +
         '<div class="trend-row"><span class="tl">Avg. volume</span><span class="tv">' + vol.toFixed(2) + ' L</span></div>' +
         '<div class="trend-row"><span class="tl">Total sessions</span><span class="tv">' + inWin.length + '</span></div>' +
         '<div class="trend-row"><span class="tl">Total breaths</span><span class="tv">' + totBreaths + ' / ' + totTarget + '</span></div>' +
@@ -1593,10 +1834,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         profileFilled = true;
       }
       $('deviceInfo').textContent = d.mode + ' mode \u00b7 ' + d.ip;
-      if (!deviceId && d.dev) {
-        deviceId = d.dev;
-        setTimeout(syncHistory, 800);   // first sync shortly after connect
-      }
+      if (!deviceId && d.dev) deviceId = d.dev;
 
       // ---- Exercise flow ----
       // Sessions start only from the app's own "Start breath" button —
