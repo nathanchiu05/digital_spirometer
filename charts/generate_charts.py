@@ -128,7 +128,7 @@ adherence_chart("adherence_bad", "Adherence: falling off",
 
 # ---------- Inspiratory capacity: best breath per day vs volume goal ----------
 GOAL_ML = 2500
-SENSOR_FLOOR_ML = 500
+BREATH_START_ML = 750  # matches BREATH_START_ML in SmartSpirometer.ino
 random.seed(7)
 improving = [1200 + 1500 * (1 - math.exp(-d / 8)) + random.uniform(-90, 90) for d in DAY_AXIS]
 flat = [1350 + random.uniform(-110, 110) - 4 * d for d in DAY_AXIS]
@@ -137,8 +137,8 @@ flat = [1350 + random.uniform(-110, 110) - 4 * d for d in DAY_AXIS]
 def ic_chart(name, title, subtitle, vals, flag=None, goal_day=None):
     fig = base_figure(title, subtitle, 3000, 500)
     fig.add_hrect(
-        y0=0, y1=SENSOR_FLOOR_ML, fillcolor=MUTED, opacity=0.16, line_width=0, layer="below",
-        annotation=dict(text=f"Below sensor range (&lt;{SENSOR_FLOOR_ML} mL)", font=dict(size=11, color=INK_2),
+        y0=0, y1=BREATH_START_ML, fillcolor=MUTED, opacity=0.16, line_width=0, layer="below",
+        annotation=dict(text=f"Below breath threshold (&lt;{BREATH_START_ML} mL)", font=dict(size=11, color=INK_2),
                         xshift=6, yshift=4),
         annotation_position="bottom left",
     )

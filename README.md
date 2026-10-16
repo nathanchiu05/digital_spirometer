@@ -5,7 +5,7 @@
 - An analog spirometer only shows the patient a number in the moment. Nothing gets recorded, so whether they actually did their breaths, and whether they're getting better, comes down to memory.
 - This device logs every breath with a timestamp, so the care team can see two things over the recovery program: **adherence** (breaths done each day against the daily goal) and **inspiratory capacity** (best breath each day against the volume goal).
 - Both can be flagged automatically, like when someone stops doing their breaths, or when their volume stops improving. That's a cue to check in early instead of finding out at the next appointment.
-- The charts below use simulated data to show what on-track and flagged patients look like. Volumes under 500 mL are greyed out since the sensor can't read them (see Limitations). They're made with Plotly. Each chart also has an interactive `.html` version in `charts/` with hover tooltips. To regenerate them, run `pip install -r charts/requirements.txt` and then `python3 charts/generate_charts.py`.
+- The charts below use simulated data to show what on-track and flagged patients look like. Volumes under 750 mL are greyed out, since breaths that don't reach that level aren't recorded (see Limitations). They're made with Plotly. Each chart also has an interactive `.html` version in `charts/` with hover tooltips. To regenerate them, run `pip install -r charts/requirements.txt` and then `python3 charts/generate_charts.py`.
 
 | On track | Flagged |
 |---|---|
@@ -24,7 +24,7 @@
 
 - *Improving:* The best breath climbs from about 1,350 mL to about 2,680 mL. Most of the gain comes in the first 1–2 weeks, then it levels off near the goal, which is the shape you'd expect as the lungs recover. The patient first reaches the 2,500 mL goal on day 17 and stays above it for the rest of the program.
 - *No improvement:* The best breath stays between about 1,200 and 1,420 mL for the whole three weeks and drifts slightly downward. It never gets close to the goal. The flag fires once there's been no gain for 7 days. This patient may still be doing their breaths every day, so adherence alone wouldn't catch this. It could point to a complication or poor technique, and it's a cue for the care team to take a closer look.
-- Every value on both charts is well above the 500 mL sensor floor, so these trends are inside the range the device can measure reliably.
+- Every value on both charts is well above the 750 mL breath threshold, so these trends are inside the range the device can measure reliably.
 
 **Using both together**
 
